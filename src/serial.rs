@@ -7,6 +7,7 @@ use mio::{Events, Interest, Poll, Token};
 use mio_serial::SerialStream;
 use nix::{
     fcntl::OFlag,
+    pty::PtyMaster,
     sys::{
         stat::Mode,
         termios::{tcgetattr, tcsetattr, InputFlags, LocalFlags, OutputFlags, SetArg},
@@ -52,7 +53,11 @@ pub fn at_command(ss: &mut SerialStream, command: &str, timeout_ms: u32) -> Resu
     bail!(GsmError::AtCommandTimedOut(command.to_string()))
 }
 
-pub fn openpty(ptmx: String, channel_index: u8, symlink_prefix: Option<String>) -> Result<()> {
+pub fn openpty(
+    ptmx: String,
+    channel_index: u8,
+    symlink_prefix: Option<String>,
+) -> Result<PtyMaster> {
     let fd = nix::pty::posix_openpt(OFlag::O_RDWR | OFlag::O_NONBLOCK)?;
     if let Some(prefix) = symlink_prefix {
         let symlink = format!("{}{}", prefix, channel_index);
@@ -92,5 +97,5 @@ pub fn openpty(ptmx: String, channel_index: u8, symlink_prefix: Option<String>) 
             | OutputFlags::ONOCR
             | OutputFlags::OCRNL);
     tcsetattr(&fd, SetArg::TCSANOW, &termios)?;
-    Ok(())
+    Ok(fd)
 }
