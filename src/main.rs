@@ -1,58 +1,14 @@
-use std::io::{Read, Write};
-
-use anyhow::{bail, Result};
+use anyhow::{Ok, Result};
 use clap::Parser;
 use cli::Args;
-use log::debug;
-use mio::{Events, Interest, Poll, Token};
-use mio_serial::{SerialPortBuilderExt, SerialStream};
+use mio_serial::SerialPortBuilderExt;
+use serial::at_command;
 mod cli;
-use thiserror::Error;
+mod error;
+mod serial;
 
-#[derive(Error, Debug)]
-pub enum GsmError {
-    #[error("AT command failed: {0}")]
-    AtCommandFailed(String),
-    #[error("AT command timed out: {0}")]
-    AtCommandTimedOut(String),
-}
-const SERIAL_TOKEN: Token = Token(0);
-
-pub fn at_command(ss: &mut SerialStream, command: &str, timeout_ms: u32) -> Result<()> {
-    let mut poll = Poll::new()?;
-    let mut events = Events::with_capacity(1);
-    poll.registry()
-        .register(ss, SERIAL_TOKEN, Interest::READABLE)?;
-
-    let mut buf = vec![0u8; 1024];
-    let timeout = Some(std::time::Duration::from_millis(timeout_ms as u64));
-
-    debug!(
-        "Sending AT command: {:02X?} -> {}",
-        command.as_bytes(),
-        command
-    );
-    ss.write_all(command.as_bytes())?;
-
-    for _ in 0..100 {
-        poll.poll(&mut events, timeout)?;
-        for event in events.iter() {
-            match event.token() {
-                SERIAL_TOKEN => {
-                    let n = ss.read(&mut buf)?;
-                    let response = std::str::from_utf8(&buf[..n])?;
-                    debug!("Received {} bytes: {:02X?} -> {}", n, &buf[..n], response);
-                    if response.contains("OK") {
-                        return Ok(());
-                    } else if response.contains("ERROR") {
-                        return Err(GsmError::AtCommandFailed(command.to_string()).into());
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    bail!(GsmError::AtCommandTimedOut(command.to_string()))
+pub fn init_sam201() -> Result<()> {
+    Ok(())
 }
 
 fn main() -> Result<()> {
