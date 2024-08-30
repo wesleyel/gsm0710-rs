@@ -7,6 +7,7 @@ use serial::{at_command, openpty};
 mod cli;
 mod error;
 mod serial;
+mod buffer;
 
 pub fn init_sam201(ss: &mut SerialStream) -> Result<()> {
     const MUX_CMD: &str = "AT+CMUX=1\r\n";
