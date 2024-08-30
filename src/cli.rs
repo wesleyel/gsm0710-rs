@@ -12,7 +12,7 @@ pub enum ModemType {
 }
 
 /// A gsm0710 protocol MUX implementation
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, author, long_about = None, arg_required_else_help = true)]
 pub struct Args {
     /// Pty device to open
