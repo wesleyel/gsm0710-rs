@@ -1,3 +1,9 @@
+use nom::bytes::streaming::tag;
+use nom::bytes::streaming::take_until;
+use nom::multi::count;
+use nom::number::streaming::be_u8;
+use nom::IResult;
+use nom::Parser;
 use ringbuffer::AllocRingBuffer;
 use ringbuffer::RingBuffer;
 
@@ -5,6 +11,40 @@ use crate::buffer;
 
 const GSM0710_BUFFER_CAPACITY: usize = 2048;
 const GSM0710_FCS: u8 = 0x7E;
+
+struct GSM0710Frame {
+    channel: u8,
+    control: u8,
+    data_len: u16,
+    data: Vec<u8>,
+}
+
+impl GSM0710Frame {
+    fn parse(input: &[u8]) -> IResult<&[u8], Self>
+    where
+        Self: Sized,
+    {
+        let flag_needed = GSM0710_FCS.to_string();
+        let (input, _) = take_until(flag_needed.as_bytes())(input)?;
+        let (input, flag) = tag(flag_needed.as_bytes())(input)?;
+        let (input, channel) = be_u8(input)?;
+        let (input, control) = be_u8(input)?;
+        let (input, data_len) = be_u8(input)?;
+        let data_len = ((data_len & 254) >> 1) as u16;
+        let (input, data) = count(be_u8, data_len as usize)(input)?;
+        let (input, fcs) = be_u8(input)?;
+        let (input, flag) = tag(flag_needed.as_bytes())(input)?;
+        Ok((
+            input,
+            GSM0710Frame {
+                channel,
+                control,
+                data_len,
+                data: data.to_vec(),
+            },
+        ))
+    }
+}
 
 trait GSM0710Buffer {
     fn push_vec(&mut self, vec: Vec<u8>);
