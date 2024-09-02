@@ -115,8 +115,8 @@ pub fn openpty(
         let sym_path = unsafe { nix::pty::ptsname(&fd)? };
 
         // Remove the symlink if it already exists
-        if let Err(err) = nix::unistd::unlink(sym_path.as_str()) {
-            debug!("Failed to remove symlink: {}", err);
+        if let Err(err) = nix::unistd::unlink(symlink.as_str()) {
+            debug!("Failed to remove symlink {}: {}", symlink.as_str(), err);
         }
         // Create a new symlink from the slave pty to the symlink path
         debug!("Creating symlink: {} -> {}", sym_path, symlink);

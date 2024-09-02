@@ -1,9 +1,14 @@
 use std::{
     io::{Read, Write},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::channel,
+        Arc,
+    },
     time::Duration,
 };
 
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use buffer::{GSM0710Buffer, GSM0710_BUFFER_CAPACITY};
 use clap::Parser;
 use cli::{Args, ModemType};
@@ -13,7 +18,7 @@ use mio::{Events, Poll, Token};
 use mio_serial::{SerialPortBuilderExt, SerialStream};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use serial::{at_command, openpty, PtyStream, PtyWriteFrame};
-use types::{AddressImpl, ControlImpl, Frame, FrameType};
+use types::{AddressImpl, ControlImpl, Frame, FrameType, CR, C_CLD};
 mod buffer;
 mod cli;
 mod error;
@@ -40,6 +45,8 @@ fn main() -> Result<()> {
         _ => log::Level::Trace,
     };
     simple_logger::init_with_level(log_level).unwrap();
+    let term = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
 
     let mut buffer = AllocRingBuffer::<u8>::new(GSM0710_BUFFER_CAPACITY);
     info!("Initialized buffer with capacity {}", buffer.capacity());
@@ -88,14 +95,19 @@ fn main() -> Result<()> {
             .register(pty, Token(idx + 1), mio::Interest::READABLE)?;
     }
 
-    loop {
+    while !term.load(Ordering::Relaxed) {
         poll.poll(&mut events, Some(Duration::from_secs(1)))?;
         for event in events.iter() {
             match event.token() {
                 Token(0) => {
                     let mut buf = vec![0u8; 1024];
                     let n = ss.read(&mut buf)?;
-                    debug!("Received {} bytes: {:02X?}", n, &buf[..n]);
+                    debug!(
+                        "Received {} bytes: {:02X?} from {}",
+                        n,
+                        &buf[..n],
+                        args.clone().port
+                    );
                     buffer.push_vec((&buf[..n]).to_vec());
                     loop {
                         match buffer.pop_frame1() {
@@ -117,14 +129,48 @@ fn main() -> Result<()> {
                     );
 
                     let frame = Frame::new(
-                        addr.with_dlci((idx - 1) as u8),
+                        addr.with_dlci((idx + 1) as u8),
                         ctrl.with_frame(FrameType::UIH),
                         n as u16,
                         buf[..n].to_vec(),
                     );
-                    ss.write(&frame.try_to_bytes()?)?;
+                    let data = frame.try_to_bytes()?;
+                    match ss.write(&data) {
+                        Ok(_) => debug!("Sent {} bytes to serial port: {:02X?}", data.len(), &data),
+                        Err(e) => {
+                            info!("Error sending data to serial port: {}", e);
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
+    info!("Closing logical channels");
+    ptys.iter_mut().enumerate().for_each(|(idx, pty)| {
+        debug!("Sending DISC frame to PTY {}", idx);
+        if idx != 0 {
+            let frame = Frame::new(
+                addr.with_dlci(idx as u8),
+                ctrl.with_frame(FrameType::DISC),
+                0,
+                vec![0],
+            );
+            pty.write_frame(frame.clone()).unwrap();
+        }
+    });
+    info!("Closing control channel");
+    ptys.iter_mut().enumerate().for_each(|(idx, pty)| {
+        debug!("Sending DISC frame to PTY {}", idx);
+        if idx == 0 {
+            let frame = Frame::new(
+                addr.with_dlci(idx as u8),
+                ctrl.with_frame(FrameType::UIH),
+                2,
+                vec![C_CLD | CR, 1],
+            );
+            pty.write_frame(frame.clone()).unwrap();
+        }
+    });
+    Ok(())
 }

@@ -59,9 +59,11 @@ pub type Control = u8;
 pub type Address = u8;
 
 pub const FLAG: u8 = 0xF9;
-const PF: u8 = 1 << 4;
-const CR: u8 = 1 << 1;
-const EA: u8 = 1 << 0;
+pub const C_CLD: u8 = 193;
+
+pub const PF: u8 = 1 << 4;
+pub const CR: u8 = 1 << 1;
+pub const EA: u8 = 1 << 0;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum FrameType {

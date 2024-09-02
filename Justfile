@@ -1,3 +1,5 @@
+linux_aarch64 := 'aarch64-unknown-linux-gnu'
+
 lint:
     just ensure_installed sort
     cargo fmt --all -- --check
@@ -9,6 +11,9 @@ fmt:
     cargo fmt
     cargo fix --allow-dirty
     cargo sort --workspace
+
+cross:
+    cross build --target {{linux_aarch64}}
 
 ensure_installed *args:
     #!/bin/bash
