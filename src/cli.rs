@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use clap::{ArgAction, Parser, ValueEnum};
 use serde::Serialize;
 
@@ -9,6 +11,15 @@ pub enum ModemType {
     Generic,
     /// Init Sam201 modem
     Sam201,
+}
+
+impl Display for ModemType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModemType::Generic => write!(f, "generic"),
+            ModemType::Sam201 => write!(f, "sam201"),
+        }
+    }
 }
 
 /// A gsm0710 protocol MUX implementation

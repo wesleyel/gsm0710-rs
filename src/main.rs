@@ -1,6 +1,7 @@
-use anyhow::{bail, Ok, Result};
+use anyhow::{Ok, Result};
 use clap::Parser;
 use cli::{Args, ModemType};
+use error::GsmError;
 use log::info;
 use mio_serial::{SerialPortBuilderExt, SerialStream};
 use serial::{at_command, openpty};
@@ -45,7 +46,7 @@ fn main() -> Result<()> {
 
     match args.modem {
         ModemType::Sam201 => init_sam201(&mut ss)?,
-        _ => bail!("Unsupported modem type"),
+        _ => return Err(GsmError::UnsupportedModemType(args.modem.to_string()).into()),
     }
 
     // TODO: init mux and open control channel and logical channels
