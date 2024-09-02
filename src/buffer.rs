@@ -2,7 +2,7 @@ use ringbuffer::RingBuffer;
 
 use crate::types::{Frame, FLAG};
 
-const GSM0710_BUFFER_CAPACITY: usize = 2048;
+pub const GSM0710_BUFFER_CAPACITY: usize = 2048;
 
 pub trait GSM0710Buffer {
     fn push_vec(&mut self, vec: Vec<u8>);

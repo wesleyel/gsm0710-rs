@@ -1,9 +1,9 @@
 use std::io::{Read, Write};
 
-use crate::error::GsmError;
+use crate::{error::GsmError, types::Frame};
 use anyhow::{bail, Result};
 use log::debug;
-use mio::{Events, Interest, Poll, Token};
+use mio::{event::Source, Events, Interest, Poll, Token};
 use mio_serial::SerialStream;
 use nix::{
     fcntl::OFlag,
@@ -14,7 +14,60 @@ use nix::{
     },
 };
 
-const SERIAL_TOKEN: Token = Token(0);
+/// PtyStream
+#[derive(Debug)]
+pub struct PtyStream {
+    #[cfg(unix)]
+    inner: PtyMaster,
+    #[cfg(windows)]
+    inner: mem::ManuallyDrop<serialport::COMPort>,
+    #[cfg(windows)]
+    pipe: NamedPipe,
+}
+
+impl PtyStream {
+    pub fn new(inner: PtyMaster) -> Self {
+        Self { inner }
+    }
+}
+
+impl Source for PtyStream {
+    fn register(
+        &mut self,
+        registry: &mio::Registry,
+        token: Token,
+        interests: Interest,
+    ) -> std::io::Result<()> {
+        todo!()
+    }
+
+    fn reregister(
+        &mut self,
+        registry: &mio::Registry,
+        token: Token,
+        interests: Interest,
+    ) -> std::io::Result<()> {
+        todo!()
+    }
+
+    fn deregister(&mut self, registry: &mio::Registry) -> std::io::Result<()> {
+        todo!()
+    }
+}
+
+pub trait PtyWriteFrame {
+    fn write_frame(&mut self, frame: Frame) -> Result<()>;
+}
+
+impl PtyWriteFrame for PtyStream {
+    fn write_frame(&mut self, frame: Frame) -> Result<()> {
+        let buf = frame.try_to_bytes()?;
+        self.inner.write_all(&buf)?;
+        Ok(())
+    }
+}
+
+pub const SERIAL_TOKEN: Token = Token(0);
 /// Send an AT command to the modem and wait for a response.
 pub fn at_command(ss: &mut SerialStream, command: &str, timeout_ms: u32) -> Result<()> {
     let mut poll = Poll::new()?;
