@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -13,7 +14,7 @@ use buffer::{GSM0710Buffer, GSM0710_BUFFER_CAPACITY};
 use clap::Parser;
 use cli::{Args, ModemType};
 use error::GsmError;
-use log::{debug, info};
+use log::{debug, error, info};
 use mio::{Events, Poll, Token};
 use mio_serial::{SerialPortBuilderExt, SerialStream};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
@@ -51,10 +52,10 @@ fn main() -> Result<()> {
     let mut buffer = AllocRingBuffer::<u8>::new(GSM0710_BUFFER_CAPACITY);
     info!("Initialized buffer with capacity {}", buffer.capacity());
 
-    let mut ptys = Vec::new();
+    let mut ptys = HashMap::<u8, PtyStream>::new();
     for idx in 0..args.channels {
         let pty = openpty(args.clone().pty, idx, args.clone().symlink_prefix)?;
-        ptys.push(PtyStream::new(pty));
+        ptys.insert(idx, PtyStream { inner: pty });
     }
     info!("Opened {} PTYs", ptys.len());
 
@@ -72,13 +73,13 @@ fn main() -> Result<()> {
     let addr = 0u8.with_cr(true).with_ea(true).with_dlci(0);
     let ctrl = 0u8.with_pf(true).with_frame(FrameType::SABM);
     let mut frame = Frame::new(addr, ctrl, 0, vec![0]);
-    ptys.iter_mut().enumerate().for_each(|(idx, pty)| {
+    ptys.iter_mut().for_each(|(idx, pty)| {
         debug!("Sending SABM frame to PTY {}", idx);
-        if idx == 0 {
-            frame.address.set_dlci(idx as u8);
+        if *idx == 0 {
+            frame.address.set_dlci(*idx);
             pty.write_frame(frame.clone()).unwrap();
         } else {
-            frame.address.set_dlci(idx as u8);
+            frame.address.set_dlci(*idx);
             pty.write_frame(frame.clone()).unwrap();
         }
     });
@@ -90,9 +91,9 @@ fn main() -> Result<()> {
     // Register the serial port and all PTYs with the poller
     poll.registry()
         .register(&mut ss, Token(0), mio::Interest::READABLE)?;
-    for (idx, pty) in ptys.iter_mut().enumerate() {
+    for (idx, pty) in ptys.iter_mut() {
         poll.registry()
-            .register(pty, Token(idx + 1), mio::Interest::READABLE)?;
+            .register(pty, Token((idx + 1).into()), mio::Interest::READABLE)?;
     }
 
     while !term.load(Ordering::Relaxed) {
@@ -119,17 +120,25 @@ fn main() -> Result<()> {
                     }
                 }
                 Token(idx) => {
+                    let idx_real = (idx - 1) as u8;
+                    let pty = ptys.get_mut(&idx_real).unwrap();
                     let mut buf = vec![0u8; 1024];
-                    let n = ptys[idx - 1].inner.read(&mut buf)?;
+                    let n = match pty.inner.read(&mut buf) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            error!("Error reading from PTY {}: {}", idx_real, e);
+                            break;
+                        }
+                    };
                     debug!(
                         "Received {} bytes from PTY {}: {:02X?}",
                         n,
-                        idx - 1,
+                        idx_real,
                         &buf[..n]
                     );
 
                     let frame = Frame::new(
-                        addr.with_dlci((idx + 1) as u8),
+                        addr.with_dlci(idx_real),
                         ctrl.with_frame(FrameType::UIH),
                         n as u16,
                         buf[..n].to_vec(),
@@ -138,7 +147,7 @@ fn main() -> Result<()> {
                     match ss.write(&data) {
                         Ok(_) => debug!("Sent {} bytes to serial port: {:02X?}", data.len(), &data),
                         Err(e) => {
-                            info!("Error sending data to serial port: {}", e);
+                            error!("Error sending data to serial port: {}", e);
                             break;
                         }
                     }
@@ -147,11 +156,11 @@ fn main() -> Result<()> {
         }
     }
     info!("Closing logical channels");
-    ptys.iter_mut().enumerate().for_each(|(idx, pty)| {
+    ptys.iter_mut().for_each(|(idx, pty)| {
         debug!("Sending DISC frame to PTY {}", idx);
-        if idx != 0 {
+        if *idx != 0 {
             let frame = Frame::new(
-                addr.with_dlci(idx as u8),
+                addr.with_dlci(*idx),
                 ctrl.with_frame(FrameType::DISC),
                 0,
                 vec![0],
@@ -160,17 +169,12 @@ fn main() -> Result<()> {
         }
     });
     info!("Closing control channel");
-    ptys.iter_mut().enumerate().for_each(|(idx, pty)| {
-        debug!("Sending DISC frame to PTY {}", idx);
-        if idx == 0 {
-            let frame = Frame::new(
-                addr.with_dlci(idx as u8),
-                ctrl.with_frame(FrameType::UIH),
-                2,
-                vec![C_CLD | CR, 1],
-            );
-            pty.write_frame(frame.clone()).unwrap();
-        }
-    });
+    let frame = Frame::new(
+        addr.with_dlci(0),
+        ctrl.with_frame(FrameType::UIH),
+        2,
+        vec![C_CLD | CR, 1],
+    );
+    ptys.get_mut(&0).unwrap().write_frame(frame)?;
     Ok(())
 }

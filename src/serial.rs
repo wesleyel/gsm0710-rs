@@ -23,12 +23,6 @@ pub struct PtyStream {
     pub inner: PtyMaster,
 }
 
-impl PtyStream {
-    pub fn new(inner: PtyMaster) -> Self {
-        Self { inner }
-    }
-}
-
 impl Source for PtyStream {
     fn register(
         &mut self,
