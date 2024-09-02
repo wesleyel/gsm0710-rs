@@ -1,11 +1,6 @@
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc::channel,
-        Arc,
-    },
     time::Duration,
 };
 
@@ -31,8 +26,8 @@ pub fn init_sam201(ss: &mut SerialStream) -> Result<()> {
     const HOLA_CMD: &str = "AT\r\n";
 
     info!("Initializing SAM-201 modem");
-    at_command(ss, HOLA_CMD, 1000)?;
-    at_command(ss, MUX_CMD, 1000)?;
+    at_command(ss, HOLA_CMD, 100)?;
+    at_command(ss, MUX_CMD, 100)?;
     info!("SAM-201 modem initialized");
     Ok(())
 }
@@ -46,8 +41,6 @@ fn main() -> Result<()> {
         _ => log::Level::Trace,
     };
     simple_logger::init_with_level(log_level).unwrap();
-    let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
 
     let mut buffer = AllocRingBuffer::<u8>::new(GSM0710_BUFFER_CAPACITY);
     info!("Initialized buffer with capacity {}", buffer.capacity());
@@ -71,7 +64,7 @@ fn main() -> Result<()> {
     info!("Modem {} initialized", args.modem);
 
     let addr = 0u8.with_cr(true).with_ea(true).with_dlci(0);
-    let ctrl = 0u8.with_pf(true).with_frame(FrameType::SABM);
+    let ctrl = 0u8.with_pf(true).with_frame_type(FrameType::SABM);
     let mut frame = Frame::new(addr, ctrl, 0, vec![0]);
     ptys.iter_mut().for_each(|(idx, pty)| {
         debug!("Sending SABM frame to PTY {}", idx);
@@ -96,7 +89,7 @@ fn main() -> Result<()> {
             .register(pty, Token((idx + 1).into()), mio::Interest::READABLE)?;
     }
 
-    while !term.load(Ordering::Relaxed) {
+    'outer: loop {
         poll.poll(&mut events, Some(Duration::from_secs(1)))?;
         for event in events.iter() {
             match event.token() {
@@ -111,11 +104,22 @@ fn main() -> Result<()> {
                     );
                     buffer.push_vec((&buf[..n]).to_vec());
                     loop {
-                        match buffer.pop_frame1() {
-                            Some(frame) => {
-                                todo!("Handle frame: {:?}", frame);
-                            }
+                        let frame = match buffer.pop_frame1() {
+                            Some(frame) => frame,
                             None => break,
+                        };
+                        match frame.address.get_frame_type() {
+                            Err(e) => {
+                                error!("Error parsing frame type: {}", e);
+                                continue;
+                            }
+                            Ok(ft) => match ft {
+                                FrameType::UIH | FrameType::UI => {
+                                    let pty = ptys.get_mut(&frame.address.get_dlci()).unwrap();
+                                    pty.inner.write(&frame.content)?;
+                                }
+                                _ => {}
+                            },
                         }
                     }
                 }
@@ -139,7 +143,7 @@ fn main() -> Result<()> {
 
                     let frame = Frame::new(
                         addr.with_dlci(idx_real),
-                        ctrl.with_frame(FrameType::UIH),
+                        ctrl.with_frame_type(FrameType::UIH),
                         n as u16,
                         buf[..n].to_vec(),
                     );
@@ -155,13 +159,14 @@ fn main() -> Result<()> {
             }
         }
     }
+
     info!("Closing logical channels");
     ptys.iter_mut().for_each(|(idx, pty)| {
         debug!("Sending DISC frame to PTY {}", idx);
         if *idx != 0 {
             let frame = Frame::new(
                 addr.with_dlci(*idx),
-                ctrl.with_frame(FrameType::DISC),
+                ctrl.with_frame_type(FrameType::DISC),
                 0,
                 vec![0],
             );
@@ -171,10 +176,11 @@ fn main() -> Result<()> {
     info!("Closing control channel");
     let frame = Frame::new(
         addr.with_dlci(0),
-        ctrl.with_frame(FrameType::UIH),
+        ctrl.with_frame_type(FrameType::UIH),
         2,
         vec![C_CLD | CR, 1],
     );
     ptys.get_mut(&0).unwrap().write_frame(frame)?;
+
     Ok(())
 }

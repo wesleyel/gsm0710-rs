@@ -77,9 +77,9 @@ pub enum FrameType {
 
 #[allow(dead_code)]
 pub trait ControlImpl {
-    fn get_frame(&self) -> Result<FrameType>;
-    fn set_frame(&mut self, frame: FrameType);
-    fn with_frame(&self, frame: FrameType) -> Self;
+    fn get_frame_type(&self) -> Result<FrameType>;
+    fn set_frame_type(&mut self, frame: FrameType);
+    fn with_frame_type(&self, frame: FrameType) -> Self;
     fn get_pf(&self) -> bool;
     fn set_pf(&mut self, pf: bool);
     fn with_pf(&self, pf: bool) -> Self;
@@ -87,7 +87,7 @@ pub trait ControlImpl {
 }
 
 impl ControlImpl for Control {
-    fn get_frame(&self) -> Result<FrameType> {
+    fn get_frame_type(&self) -> Result<FrameType> {
         let address = self & !PF;
         match address {
             0x2F => Ok(FrameType::SABM),
@@ -99,7 +99,7 @@ impl ControlImpl for Control {
             _ => Err(GsmError::UnsupportedFrameType(format!("{:02X?}", address)).into()),
         }
     }
-    fn set_frame(&mut self, frame: FrameType) {
+    fn set_frame_type(&mut self, frame: FrameType) {
         let pf = *self & PF;
         let frame = match frame {
             FrameType::SABM => 0x2F,
@@ -112,9 +112,9 @@ impl ControlImpl for Control {
         *self = frame | pf;
     }
 
-    fn with_frame(&self, frame: FrameType) -> Self {
+    fn with_frame_type(&self, frame: FrameType) -> Self {
         let mut ctrl = *self;
-        ctrl.set_frame(frame);
+        ctrl.set_frame_type(frame);
         ctrl
     }
 
@@ -137,7 +137,7 @@ impl ControlImpl for Control {
 
     fn new_control(frame: FrameType, pf: bool) -> Self {
         let mut ctrl: u8 = 0;
-        ctrl.set_frame(frame);
+        ctrl.set_frame_type(frame);
         ctrl.set_pf(pf);
         ctrl
     }
@@ -256,7 +256,7 @@ impl Frame {
         let crc = Crc::<u8>::new(&crc::CRC_8_ROHC);
         let mut data = vec![self.address, self.control];
         data.extend_from_slice(&self.length_bytes());
-        match self.control.get_frame() {
+        match self.control.get_frame_type() {
             Ok(FrameType::UI) => data.extend_from_slice(&self.content),
             Ok(_) => {}
             Err(e) => return Err(e),
@@ -337,9 +337,9 @@ mod tests {
     #[test]
     fn control_impl_works() {
         let mut ctrl = Control::new_control(FrameType::SABM, true);
-        assert_eq!(ctrl.get_frame().unwrap(), FrameType::SABM);
+        assert_eq!(ctrl.get_frame_type().unwrap(), FrameType::SABM);
         assert_eq!(ctrl.get_pf(), true);
-        ctrl.set_frame(FrameType::UA);
+        ctrl.set_frame_type(FrameType::UA);
         ctrl.set_pf(false);
         assert_eq!(ctrl, 0x63);
     }
