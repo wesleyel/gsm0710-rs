@@ -50,17 +50,15 @@ impl<T: RingBuffer<u8>> GSM0710Buffer for T {
         if self.is_empty() {
             return None;
         }
-        if self.to_vec().iter().find(|&&b| b == FLAG).is_none() {
+        if !self.to_vec().iter().any(|&b| b == FLAG) {
             self.clear();
             return None;
         }
-        loop {
-            let frame = self.pop_frame();
-            if frame.is_some() {
-                return frame;
-            } else {
-                return self.pop_frame1();
-            }
+        let frame = self.pop_frame();
+        if frame.is_some() {
+            frame
+        } else {
+            self.pop_frame1()
         }
     }
 }

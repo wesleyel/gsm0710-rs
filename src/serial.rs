@@ -80,18 +80,15 @@ pub fn at_command(ss: &mut SerialStream, command: &str, timeout_ms: u32) -> Resu
     for _ in 0..100 {
         poll.poll(&mut events, timeout)?;
         for event in events.iter() {
-            match event.token() {
-                SERIAL_TOKEN => {
-                    let n = ss.read(&mut buf)?;
-                    let response = std::str::from_utf8(&buf[..n])?;
-                    debug!("Received {} bytes: {:02X?} -> {}", n, &buf[..n], response);
-                    if response.contains("OK") {
-                        return Ok(());
-                    } else if response.contains("ERROR") {
-                        return Err(GsmError::AtCommandFailed(command.to_string()).into());
-                    }
+            if event.token() == SERIAL_TOKEN {
+                let n = ss.read(&mut buf)?;
+                let response = std::str::from_utf8(&buf[..n])?;
+                debug!("Received {} bytes: {:02X?} -> {}", n, &buf[..n], response);
+                if response.contains("OK") {
+                    return Ok(());
+                } else if response.contains("ERROR") {
+                    return Err(GsmError::AtCommandFailed(command.to_string()).into());
                 }
-                _ => {}
             }
         }
     }
@@ -131,16 +128,14 @@ pub fn openpty(
 
     // Set the slave pty terminal settings
     let mut termios = tcgetattr(&fd)?;
-    termios.input_flags =
-        termios.input_flags & !(InputFlags::INLCR | InputFlags::ICRNL | InputFlags::IGNCR);
-    termios.local_flags = termios.local_flags
-        & !(LocalFlags::ICANON | LocalFlags::ECHO | LocalFlags::ECHOE | LocalFlags::ISIG);
-    termios.output_flags = termios.output_flags
-        & !(OutputFlags::OPOST
-            | OutputFlags::OLCUC
-            | OutputFlags::ONLRET
-            | OutputFlags::ONOCR
-            | OutputFlags::OCRNL);
+    termios.input_flags &= !(InputFlags::INLCR | InputFlags::ICRNL | InputFlags::IGNCR);
+    termios.local_flags &=
+        !(LocalFlags::ICANON | LocalFlags::ECHO | LocalFlags::ECHOE | LocalFlags::ISIG);
+    termios.output_flags &= !(OutputFlags::OPOST
+        | OutputFlags::OLCUC
+        | OutputFlags::ONLRET
+        | OutputFlags::ONOCR
+        | OutputFlags::OCRNL);
     tcsetattr(&fd, SetArg::TCSANOW, &termios)?;
     Ok(fd)
 }

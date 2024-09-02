@@ -70,13 +70,8 @@ fn main() -> Result<()> {
     let mut frame = Frame::new(addr, ctrl, 0, vec![0]);
     ptys.iter_mut().for_each(|(idx, pty)| {
         debug!("Sending SABM frame to PTY {}", idx);
-        if *idx == 0 {
-            frame.address.set_dlci(*idx);
-            pty.write_frame(frame.clone()).unwrap();
-        } else {
-            frame.address.set_dlci(*idx);
-            pty.write_frame(frame.clone()).unwrap();
-        }
+        frame.address.set_dlci(*idx);
+        pty.write_frame(frame.clone()).unwrap();
     });
     info!("Sent SABM frames to all PTYs");
 
@@ -90,7 +85,7 @@ fn main() -> Result<()> {
         poll.registry()
             .register(pty, Token((idx + 1).into()), mio::Interest::READABLE)?;
     }
-    let mut signals = Signals::new(&[SIGTERM, SIGINT])?;
+    let mut signals = Signals::new([SIGTERM, SIGINT])?;
     const SIGNAL_TOKEN: Token = Token(100);
     poll.registry()
         .register(&mut signals, SIGNAL_TOKEN, mio::Interest::READABLE)?;
@@ -114,12 +109,8 @@ fn main() -> Result<()> {
                         &buf[..n],
                         args.clone().port
                     );
-                    buffer.push_vec((&buf[..n]).to_vec());
-                    loop {
-                        let frame = match buffer.pop_frame1() {
-                            Some(frame) => frame,
-                            None => break,
-                        };
+                    buffer.push_vec((buf[..n]).to_vec());
+                    while let Some(frame) = buffer.pop_frame1() {
                         match frame.address.get_frame_type() {
                             Err(e) => {
                                 error!("Error parsing frame type: {}", e);
@@ -128,7 +119,7 @@ fn main() -> Result<()> {
                             Ok(ft) => match ft {
                                 FrameType::UIH | FrameType::UI => {
                                     let pty = ptys.get_mut(&frame.address.get_dlci()).unwrap();
-                                    pty.inner.write(&frame.content)?;
+                                    pty.inner.write_all(&frame.content)?;
                                 }
                                 _ => {}
                             },
@@ -164,7 +155,7 @@ fn main() -> Result<()> {
                         buf[..n].to_vec(),
                     );
                     let data = frame.try_to_bytes()?;
-                    match ss.write(&data) {
+                    match ss.write_all(&data) {
                         Ok(_) => debug!("Sent {} bytes to serial port: {:02X?}", data.len(), &data),
                         Err(e) => {
                             error!("Error sending data to serial port: {}", e);

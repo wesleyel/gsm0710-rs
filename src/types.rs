@@ -65,6 +65,7 @@ pub const PF: u8 = 1 << 4;
 pub const CR: u8 = 1 << 1;
 pub const EA: u8 = 1 << 0;
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum FrameType {
     SABM,
@@ -244,7 +245,7 @@ impl Frame {
 
     pub fn length_bytes(&self) -> Vec<u8> {
         let length = self.length * 2 + 1;
-        if length > u8::max_value() as u16 {
+        if length > u8::MAX as u16 {
             length.to_be_bytes().to_vec()
         } else {
             vec![length as u8]
@@ -270,7 +271,7 @@ impl Frame {
         // 1 byte for address, 1 byte for control, 1 byte for length, 1 byte for FCS, 1 byte for flag
         let mut len = 5;
         // Find the first flag
-        while let Some(byte) = iter.next() {
+        for byte in iter.by_ref() {
             len += 1;
             if byte == FLAG {
                 break;
@@ -317,7 +318,7 @@ impl Frame {
 
     pub fn try_to_bytes(&self) -> Result<Vec<u8>> {
         let mut data = vec![FLAG, self.address, self.control];
-        if self.length > u8::max_value() as u16 {
+        if self.length > u8::MAX as u16 {
             let len = self.length.to_be_bytes();
             data.extend_from_slice(&len);
         } else {
@@ -338,7 +339,7 @@ mod tests {
     fn control_impl_works() {
         let mut ctrl = Control::new_control(FrameType::SABM, true);
         assert_eq!(ctrl.get_frame_type().unwrap(), FrameType::SABM);
-        assert_eq!(ctrl.get_pf(), true);
+        assert!(ctrl.get_pf());
         ctrl.set_frame_type(FrameType::UA);
         ctrl.set_pf(false);
         assert_eq!(ctrl, 0x63);
@@ -347,8 +348,8 @@ mod tests {
     #[test]
     fn address_impl_works() {
         let mut addr = Address::new_address(true, true, 0x0F);
-        assert_eq!(addr.get_cr(), true);
-        assert_eq!(addr.get_ea(), true);
+        assert!(addr.get_cr());
+        assert!(addr.get_ea());
         assert_eq!(addr.get_dlci(), 0x0F);
         addr.set_cr(false);
         addr.set_ea(false);
