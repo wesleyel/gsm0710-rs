@@ -58,7 +58,7 @@ pub type Control = u8;
 /// |                  | Responder -> Initiator | 1         |
 pub type Address = u8;
 
-const FLAG: u8 = 0xF9;
+pub const FLAG: u8 = 0xF9;
 const PF: u8 = 1 << 4;
 const CR: u8 = 1 << 1;
 const EA: u8 = 1 << 0;
@@ -212,7 +212,7 @@ impl Frame {
     }
 
     /// Calculate the Frame Check Sequence (FCS) of the frame
-    pub fn fcs(&self) -> Result<u8> {
+    pub fn try_fcs(&self) -> Result<u8> {
         let crc = Crc::<u8>::new(&crc::CRC_8_ROHC);
         let mut data = vec![self.address, self.control];
         data.extend_from_slice(&self.length_bytes());
@@ -226,9 +226,12 @@ impl Frame {
     }
 
     /// Parse a frame from a byte stream
-    pub fn parse<T: Iterator<Item = u8>>(iter: &mut T) -> Option<Self> {
+    pub fn parse<T: Iterator<Item = u8>>(iter: &mut T) -> Option<(Self, usize)> {
+        // 1 byte for address, 1 byte for control, 1 byte for length, 1 byte for FCS, 1 byte for flag
+        let mut len = 5;
         // Find the first flag
         while let Some(byte) = iter.next() {
+            len += 1;
             if byte == FLAG {
                 break;
             }
@@ -255,6 +258,7 @@ impl Frame {
         if flag != FLAG {
             return None;
         }
+        len += length as usize;
         let frame = Frame {
             address,
             control,
@@ -263,15 +267,15 @@ impl Frame {
         };
 
         // validate the frame
-        let fcs_calc = frame.fcs().ok()?;
+        let fcs_calc = frame.try_fcs().ok()?;
         if fcs != fcs_calc {
             return None;
         }
 
-        Some(frame)
+        Some((frame, len))
     }
 
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+    pub fn try_to_bytes(&self) -> Result<Vec<u8>> {
         let mut data = vec![FLAG, self.address, self.control];
         if self.length > u8::max_value() as u16 {
             let len = self.length.to_be_bytes();
@@ -280,7 +284,7 @@ impl Frame {
             data.push(((self.length as u8) << 1) | 1);
         };
         data.extend_from_slice(&self.content);
-        data.push(self.fcs()?);
+        data.push(self.try_fcs()?);
         data.push(FLAG);
         Ok(data)
     }
@@ -316,22 +320,23 @@ mod tests {
     fn frame_fcs_works() {
         // Frame with UI frame type
         let frame = Frame::new(7, 239, 4, vec![0x41, 0x54, 0xD, 0xA]);
-        assert_eq!(frame.fcs().unwrap(), 0x39);
+        assert_eq!(frame.try_fcs().unwrap(), 0x39);
         // Frame with UIH frame type
         let addr = Address::new_address(true, true, 0x0F);
         let ctrl = Control::new_control(FrameType::UIH, true);
         let len = 0x0A;
         let frame = Frame::new(addr, ctrl, len, vec![0x41, 0x54, 0xD, 0xA]);
-        assert_eq!(frame.fcs().unwrap(), 0x23);
+        assert_eq!(frame.try_fcs().unwrap(), 0x23);
     }
 
     #[test]
     fn frame_parse_works() {
         let frame = Frame::new(7, 239, 4, vec![0x41, 0x54, 0xD, 0xA]);
-        let frame_bytes = frame.to_bytes().unwrap();
+        let frame_bytes = frame.try_to_bytes().unwrap();
         dbg!(frame_bytes.clone());
         let mut iter = frame_bytes.into_iter();
-        let parsed_frame = Frame::parse(&mut iter).unwrap();
+        let (parsed_frame, len) = Frame::parse(&mut iter).unwrap();
         assert_eq!(parsed_frame, frame);
+        assert_eq!(len, 10);
     }
 }
