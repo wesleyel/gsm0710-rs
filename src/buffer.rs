@@ -36,12 +36,8 @@ impl<T: RingBuffer<u8>> GSM0710Buffer for T {
             }
             None => {
                 // Discard all bytes until the next FLAG
-                loop {
-                    if let Some(byte) = self.dequeue() {
-                        if byte == FLAG {
-                            break;
-                        }
-                    } else {
+                while let Some(byte) = self.dequeue() {
+                    if byte == FLAG {
                         break;
                     }
                 }

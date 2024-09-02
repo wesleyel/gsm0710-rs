@@ -14,6 +14,8 @@ use mio::{Events, Poll, Token};
 use mio_serial::{SerialPortBuilderExt, SerialStream};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use serial::{at_command, openpty, PtyStream, PtyWriteFrame};
+use signal_hook::consts::signal::*;
+use signal_hook_mio::v0_8::Signals;
 use types::{AddressImpl, ControlImpl, Frame, FrameType, CR, C_CLD};
 mod buffer;
 mod cli;
@@ -88,9 +90,19 @@ fn main() -> Result<()> {
         poll.registry()
             .register(pty, Token((idx + 1).into()), mio::Interest::READABLE)?;
     }
+    let mut signals = Signals::new(&[SIGTERM, SIGINT])?;
+    const SIGNAL_TOKEN: Token = Token(100);
+    poll.registry()
+        .register(&mut signals, SIGNAL_TOKEN, mio::Interest::READABLE)?;
 
     'outer: loop {
-        poll.poll(&mut events, Some(Duration::from_secs(1)))?;
+        match poll.poll(&mut events, Some(Duration::from_secs(1))) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error polling: {}", e);
+                break;
+            }
+        }
         for event in events.iter() {
             match event.token() {
                 Token(0) => {
@@ -122,6 +134,10 @@ fn main() -> Result<()> {
                             },
                         }
                     }
+                }
+                SIGNAL_TOKEN => {
+                    info!("Received signal, exiting");
+                    break 'outer;
                 }
                 Token(idx) => {
                     let idx_real = (idx - 1) as u8;

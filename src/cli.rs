@@ -38,10 +38,6 @@ pub struct Args {
     #[arg(short, long, default_value = "115200")]
     pub baud: u32,
 
-    /// Maximum frame size
-    #[arg(short, long, default_value = "32")]
-    pub frame_size: u32,
-
     /// Modem type
     #[arg(short, long, default_value = "generic")]
     pub modem: ModemType,

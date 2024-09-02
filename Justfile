@@ -13,7 +13,7 @@ fmt:
     cargo sort --workspace
 
 cross:
-    cross build --target {{linux_aarch64}}
+    cross build --target {{linux_aarch64}} --release
 
 ensure_installed *args:
     #!/bin/bash
