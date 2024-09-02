@@ -4,10 +4,11 @@ use cli::{Args, ModemType};
 use log::info;
 use mio_serial::{SerialPortBuilderExt, SerialStream};
 use serial::{at_command, openpty};
+mod buffer;
 mod cli;
 mod error;
 mod serial;
-mod buffer;
+mod types;
 
 pub fn init_sam201(ss: &mut SerialStream) -> Result<()> {
     const MUX_CMD: &str = "AT+CMUX=1\r\n";
