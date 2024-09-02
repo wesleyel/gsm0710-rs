@@ -73,13 +73,14 @@ pub enum FrameType {
     UI,
 }
 
+#[allow(dead_code)]
 pub trait ControlImpl {
     fn get_frame(&self) -> Result<FrameType>;
     fn set_frame(&mut self, frame: FrameType);
-    fn with_frame(&mut self, frame: FrameType) -> Self;
+    fn with_frame(&self, frame: FrameType) -> Self;
     fn get_pf(&self) -> bool;
     fn set_pf(&mut self, pf: bool);
-    fn with_pf(&mut self, pf: bool) -> Self;
+    fn with_pf(&self, pf: bool) -> Self;
     fn new_control(frame: FrameType, pf: bool) -> Self;
 }
 
@@ -109,7 +110,7 @@ impl ControlImpl for Control {
         *self = frame | pf;
     }
 
-    fn with_frame(&mut self, frame: FrameType) -> Self {
+    fn with_frame(&self, frame: FrameType) -> Self {
         let mut ctrl = *self;
         ctrl.set_frame(frame);
         ctrl
@@ -126,7 +127,7 @@ impl ControlImpl for Control {
         };
     }
 
-    fn with_pf(&mut self, pf: bool) -> Self {
+    fn with_pf(&self, pf: bool) -> Self {
         let mut ctrl = *self;
         ctrl.set_pf(pf);
         ctrl
@@ -140,16 +141,17 @@ impl ControlImpl for Control {
     }
 }
 
+#[allow(dead_code)]
 pub trait AddressImpl {
     fn get_cr(&self) -> bool;
     fn set_cr(&mut self, cr: bool);
-    fn with_cr(&mut self, cr: bool) -> Self;
+    fn with_cr(&self, cr: bool) -> Self;
     fn get_ea(&self) -> bool;
     fn set_ea(&mut self, ea: bool);
-    fn with_ea(&mut self, ea: bool) -> Self;
+    fn with_ea(&self, ea: bool) -> Self;
     fn get_dlci(&self) -> u8;
     fn set_dlci(&mut self, dlci: u8);
-    fn with_dlci(&mut self, dlci: u8) -> Self;
+    fn with_dlci(&self, dlci: u8) -> Self;
     fn new_address(cr: bool, ea: bool, dlci: u8) -> Self;
 }
 
@@ -165,7 +167,7 @@ impl AddressImpl for Address {
         };
     }
 
-    fn with_cr(&mut self, cr: bool) -> Self {
+    fn with_cr(&self, cr: bool) -> Self {
         let mut addr = *self;
         addr.set_cr(cr);
         addr
@@ -182,7 +184,7 @@ impl AddressImpl for Address {
         };
     }
 
-    fn with_ea(&mut self, ea: bool) -> Self {
+    fn with_ea(&self, ea: bool) -> Self {
         let mut addr = *self;
         addr.set_ea(ea);
         addr
@@ -196,7 +198,7 @@ impl AddressImpl for Address {
         *self = (dlci << 2) | (*self & 0x03);
     }
 
-    fn with_dlci(&mut self, dlci: u8) -> Self {
+    fn with_dlci(&self, dlci: u8) -> Self {
         let mut addr = *self;
         addr.set_dlci(dlci);
         addr

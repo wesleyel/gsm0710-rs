@@ -1,9 +1,12 @@
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    os::fd::AsRawFd,
+};
 
 use crate::{error::GsmError, types::Frame};
 use anyhow::{bail, Result};
 use log::debug;
-use mio::{event::Source, Events, Interest, Poll, Token};
+use mio::{event::Source, unix::SourceFd, Events, Interest, Poll, Token};
 use mio_serial::SerialStream;
 use nix::{
     fcntl::OFlag,
@@ -17,12 +20,7 @@ use nix::{
 /// PtyStream
 #[derive(Debug)]
 pub struct PtyStream {
-    #[cfg(unix)]
-    inner: PtyMaster,
-    #[cfg(windows)]
-    inner: mem::ManuallyDrop<serialport::COMPort>,
-    #[cfg(windows)]
-    pipe: NamedPipe,
+    pub inner: PtyMaster,
 }
 
 impl PtyStream {
@@ -38,7 +36,7 @@ impl Source for PtyStream {
         token: Token,
         interests: Interest,
     ) -> std::io::Result<()> {
-        todo!()
+        SourceFd(&self.inner.as_raw_fd()).register(registry, token, interests)
     }
 
     fn reregister(
@@ -47,11 +45,11 @@ impl Source for PtyStream {
         token: Token,
         interests: Interest,
     ) -> std::io::Result<()> {
-        todo!()
+        SourceFd(&self.inner.as_raw_fd()).reregister(registry, token, interests)
     }
 
     fn deregister(&mut self, registry: &mio::Registry) -> std::io::Result<()> {
-        todo!()
+        SourceFd(&self.inner.as_raw_fd()).deregister(registry)
     }
 }
 

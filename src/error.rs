@@ -6,10 +6,6 @@ pub enum GsmError {
     AtCommandFailed(String),
     #[error("AT command timed out: {0}")]
     AtCommandTimedOut(String),
-
-    #[error("Parse frame error: {0}")]
-    ParseFrameError(String),
-
     #[error("Unsupported frame type: {0}")]
     UnsupportedFrameType(String),
     #[error("Unsupported modem type: {0}")]

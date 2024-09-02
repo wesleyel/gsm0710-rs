@@ -1,5 +1,10 @@
+use std::{
+    io::{Read, Write},
+    time::Duration,
+};
+
 use anyhow::{Ok, Result};
-use buffer::GSM0710_BUFFER_CAPACITY;
+use buffer::{GSM0710Buffer, GSM0710_BUFFER_CAPACITY};
 use clap::Parser;
 use cli::{Args, ModemType};
 use error::GsmError;
@@ -36,7 +41,7 @@ fn main() -> Result<()> {
     };
     simple_logger::init_with_level(log_level).unwrap();
 
-    let buffer = AllocRingBuffer::<u8>::new(GSM0710_BUFFER_CAPACITY);
+    let mut buffer = AllocRingBuffer::<u8>::new(GSM0710_BUFFER_CAPACITY);
     info!("Initialized buffer with capacity {}", buffer.capacity());
 
     let mut ptys = Vec::new();
@@ -72,15 +77,54 @@ fn main() -> Result<()> {
     });
     info!("Sent SABM frames to all PTYs");
 
-    let poll = Poll::new()?;
-    let events = Events::with_capacity(ptys.len() + 1);
+    let mut poll = Poll::new()?;
+    let mut events = Events::with_capacity(ptys.len() + 1);
 
+    // Register the serial port and all PTYs with the poller
     poll.registry()
-        .register(&mut ss, serial::SERIAL_TOKEN, mio::Interest::READABLE)?;
+        .register(&mut ss, Token(0), mio::Interest::READABLE)?;
     for (idx, pty) in ptys.iter_mut().enumerate() {
         poll.registry()
             .register(pty, Token(idx + 1), mio::Interest::READABLE)?;
     }
 
-    Ok(())
+    loop {
+        poll.poll(&mut events, Some(Duration::from_secs(1)))?;
+        for event in events.iter() {
+            match event.token() {
+                Token(0) => {
+                    let mut buf = vec![0u8; 1024];
+                    let n = ss.read(&mut buf)?;
+                    debug!("Received {} bytes: {:02X?}", n, &buf[..n]);
+                    buffer.push_vec((&buf[..n]).to_vec());
+                    loop {
+                        match buffer.pop_frame1() {
+                            Some(frame) => {
+                                todo!("Handle frame: {:?}", frame);
+                            }
+                            None => break,
+                        }
+                    }
+                }
+                Token(idx) => {
+                    let mut buf = vec![0u8; 1024];
+                    let n = ptys[idx - 1].inner.read(&mut buf)?;
+                    debug!(
+                        "Received {} bytes from PTY {}: {:02X?}",
+                        n,
+                        idx - 1,
+                        &buf[..n]
+                    );
+
+                    let frame = Frame::new(
+                        addr.with_dlci((idx - 1) as u8),
+                        ctrl.with_frame(FrameType::UIH),
+                        n as u16,
+                        buf[..n].to_vec(),
+                    );
+                    ss.write(&frame.try_to_bytes()?)?;
+                }
+            }
+        }
+    }
 }
