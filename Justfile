@@ -13,11 +13,12 @@ fmt:
     cargo sort --workspace
 
 cross:
+    just ensure_installed cross
     cross build --target {{linux_aarch64}} --release
 
 ensure_installed *args:
     #!/bin/bash
-    cargo --list | grep -q {{ args }}
+    cargo install --list | grep -q {{ args }}
     if [[ $? -ne 0 ]]; then
         echo "error: cargo-{{ args }} is not installed"
         exit 1
